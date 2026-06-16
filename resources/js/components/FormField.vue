@@ -120,6 +120,16 @@ export default {
     this.setInitialValue()
   },
 
+  mounted() {
+    // Nova fills the outgoing FormData by calling `field.fill(formData)` on the
+    // field's metadata object (see CreateForm/UpdateForm), NOT on this component
+    // instance. So we must register our fill on `this.field` for it to run —
+    // this is exactly what Nova's `FormField` mixin does in its mounted() hook.
+    // Without it, our staged files are never appended and the server receives an
+    // empty value (triggering a spurious "required" error).
+    this.field.fill = this.fill
+  },
+
   beforeUnmount() {
     // Release object URLs created for image previews.
     this.newFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
