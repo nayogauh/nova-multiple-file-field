@@ -179,6 +179,172 @@ class MultipleFile extends Field
     }
 
     /**
+     * Validation rules applied to EACH uploaded file individually
+     * (validated against "{attribute}.*").
+     *
+     * @var array
+     */
+    public $perFileRules = [];
+
+    /**
+     * Names of Laravel rules that operate on a SINGLE file and must therefore
+     * be validated against each element of the uploaded array ("{attribute}.*")
+     * instead of the array itself.
+     *
+     * @var array<int, string>
+     */
+    protected $singleFileRuleNames = [
+        'file', 'image', 'mimes', 'mimetypes', 'dimensions', 'extensions',
+    ];
+
+    /**
+     * Add validation rules applied to EACH uploaded file individually.
+     *
+     * Use this for per-file constraints whose name Laravel can't unambiguously
+     * route (e.g. a size limit), since those would otherwise be applied to the
+     * whole array:
+     *
+     *     MultipleFile::make('Files', 'files')
+     *         ->rules('required')                 // the array must not be empty
+     *         ->fileRules('mimes:jpg,png', 'max:10240'); // each file: type + size
+     *
+     * @param  array|string  $rules
+     * @return $this
+     */
+    public function fileRules($rules)
+    {
+        $this->perFileRules = is_array($rules) ? $rules : func_get_args();
+
+        return $this;
+    }
+
+    /**
+     * Get the validation rules for this field, splitting per-file rules onto
+     * "{attribute}.*" so they validate each uploaded file (a multiple-file
+     * field always submits an array of files).
+     *
+     * @return array
+     */
+    public function getRules(NovaRequest $request): array
+    {
+        return $this->splitFileRules($this->resolveRawRules($this->rules, $request));
+    }
+
+    /**
+     * Get the creation rules, keeping the per-file / array split intact.
+     *
+     * @return array
+     */
+    public function getCreationRules(NovaRequest $request): array
+    {
+        return array_merge_recursive(
+            $this->getRules($request),
+            $this->splitFileRules($this->resolveRawRules($this->creationRules, $request))
+        );
+    }
+
+    /**
+     * Get the update rules. On update, files already stored and kept by the
+     * user satisfy presence rules (they are not re-sent as uploads), so
+     * "required"/"present"/"filled" are relaxed when files are kept.
+     *
+     * @return array
+     */
+    public function getUpdateRules(NovaRequest $request): array
+    {
+        $rules = array_merge_recursive(
+            $this->getRules($request),
+            $this->splitFileRules($this->resolveRawRules($this->updateRules, $request))
+        );
+
+        if ($this->hasKeptFiles($request) && isset($rules[$this->attribute])) {
+            $rules[$this->attribute] = array_values(array_filter(
+                Arr::wrap($rules[$this->attribute]),
+                fn ($rule) => ! in_array($rule, ['required', 'present', 'filled'], true)
+            ));
+
+            if (empty($rules[$this->attribute])) {
+                unset($rules[$this->attribute]);
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Normalise a rules definition (array or callable) into a flat array.
+     *
+     * @param  mixed  $rules
+     * @return array
+     */
+    protected function resolveRawRules($rules, NovaRequest $request): array
+    {
+        $rules = is_callable($rules) ? call_user_func($rules, $request) : $rules;
+
+        return Arr::wrap($rules);
+    }
+
+    /**
+     * Split a set of rules between the array attribute ("files") and each file
+     * within it ("files.*").
+     *
+     * @param  array  $rules
+     * @return array
+     */
+    protected function splitFileRules(array $rules): array
+    {
+        $arrayRules = [];
+        $perFile = $this->perFileRules;
+
+        foreach ($rules as $rule) {
+            if ($this->isSingleFileRule($rule)) {
+                $perFile[] = $rule;
+            } else {
+                $arrayRules[] = $rule;
+            }
+        }
+
+        $result = [];
+
+        if (! empty($arrayRules)) {
+            $result[$this->attribute] = array_values($arrayRules);
+        }
+
+        if (! empty($perFile)) {
+            $result[$this->attribute . '.*'] = array_values($perFile);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Determine whether a rule operates on a single file (and thus belongs on
+     * "{attribute}.*" rather than the array attribute).
+     *
+     * @param  mixed  $rule
+     */
+    protected function isSingleFileRule($rule): bool
+    {
+        if (! is_string($rule)) {
+            return false;
+        }
+
+        $name = Str::lower(Str::before($rule, ':'));
+
+        return in_array($name, $this->singleFileRuleNames, true);
+    }
+
+    /**
+     * Determine whether the request keeps any already-stored files.
+     */
+    protected function hasKeptFiles(NovaRequest $request): bool
+    {
+        $keep = json_decode($request->input($this->attribute . '__keep', '[]'), true) ?: [];
+
+        return ! empty($keep);
+    }
+
+    /**
      * Resolve the field's value for display, decorating each file with its URL.
      *
      * @param  mixed  $resource
