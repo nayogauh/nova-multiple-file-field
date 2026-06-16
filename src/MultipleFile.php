@@ -185,7 +185,7 @@ class MultipleFile extends Field
      * @param  string|null  $attribute
      * @return void
      */
-    public function resolve($resource, $attribute = null)
+    public function resolve($resource, ?string $attribute = null): void
     {
         $attribute = $attribute ?? $this->attribute;
 
@@ -219,7 +219,7 @@ class MultipleFile extends Field
      * @param  object  $model
      * @return void
      */
-    public function fillForAction(NovaRequest $request, $model)
+    public function fillForAction(NovaRequest $request, object $model)
     {
         $model->{$this->attribute} = $this->uploadedFilesFromRequest($request, $this->attribute);
     }
@@ -232,7 +232,7 @@ class MultipleFile extends Field
      * @param  string  $attribute
      * @return \Closure|void
      */
-    protected function fillAttributeFromRequest(NovaRequest $request, $requestAttribute, $model, $attribute)
+    protected function fillAttributeFromRequest(NovaRequest $request, string $requestAttribute, object $model, string $attribute)
     {
         // Manual mode: a custom store() callback takes full control of persistence.
         if (is_callable($this->storeCallback)) {
