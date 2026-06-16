@@ -83,6 +83,14 @@ out
 dist
 .output
 
+# Nova compiled field assets must be shipped with the Composer package
+!/dist/
+!/dist/**
+
+# Composer
+/vendor/
+composer.lock
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js
