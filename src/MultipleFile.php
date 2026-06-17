@@ -400,6 +400,18 @@ class MultipleFile extends Field
      */
     protected function fillAttributeFromRequest(NovaRequest $request, string $requestAttribute, object $model, string $attribute)
     {
+        // Inside a Nova Action the field must expose the raw uploaded files as an
+        // array (no automatic storage), exactly like fillForAction(). We handle it
+        // here too because when the field lives inside a wrapper that forwards
+        // fillInto() (e.g. a DependencyContainer), Nova routes through fill() and
+        // never calls fillForAction() on us — which previously left the action's
+        // value null and silently stored the files via the resource code path.
+        if ($request->isActionRequest()) {
+            $model->{$attribute} = $this->uploadedFilesFromRequest($request, $requestAttribute);
+
+            return;
+        }
+
         // Manual mode: a custom store() callback takes full control of persistence.
         if (is_callable($this->storeCallback)) {
             return $this->fillUsingCallback($request, $requestAttribute, $model, $attribute);
